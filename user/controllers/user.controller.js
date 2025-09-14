@@ -1,5 +1,10 @@
 const userModel = require("../models/user.model");
 const blacklisttokenModel = require("../models/blacklisttoken.model");
+const rabbitMQ = require("../service/rabbit.js");
+const EventEmitter = require('events');
+
+const rideEventEmitter = new EventEmitter();
+
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
@@ -78,10 +83,39 @@ module.exports.logout = async (req, res) => {
 };
 
 module.exports.profile = async (req, res) => {
-    try {
-        delete req.user._doc.password;
-        res.send(req.user);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-}
+  try {
+    delete req.user._doc.password;
+    res.send(req.user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports.getAcceptedRide = async (req, res) => {
+  try {
+    let responded = false;
+
+    // Long polling: wait for 'ride-accepted' event
+    rideEventEmitter.once("ride-accepted", (data) => {
+      if (!responded) {
+        responded = true;
+        res.send(data);
+      }
+    });
+
+    // Set timeout for long polling
+    setTimeout(() => {
+      if (!responded) {
+        responded = true;
+        res.status(204).send();
+      }
+    }, 30000);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+rabbitMQ.subscribeToQueue("ride-accepted", async (msg) => {
+  const data = JSON.parse(msg);
+  rideEventEmitter.emit("ride-accepted", data);
+});

@@ -2,6 +2,9 @@ const captainModel = require("../models/captain.model");
 const blacklisttokenModel = require("../models/blacklisttoken.model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const rabbitMQ = require("../service/rabbit.js");
+
+const pendingRequests = [];
 
 module.exports.register = async (req, res) => {
   try {
@@ -96,3 +99,29 @@ module.exports.toggleAvailability = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+module.exports.waitForNewRise = async (req, res) => {
+  try {
+    // set timeout for long polling 30 seconds
+    req.setTimeout(30000, () => {
+      res.status(204).end(); // No content
+    });
+
+    // add request object to the pending array
+    pendingRequests.push(res);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+rabbitMQ.subscribeToQueue("new-ride", (data) => {
+  const rideData = JSON.parse(data);
+
+  // send the new ride data to all the pending requests
+  pendingRequests.forEach((res) => {
+    res.json(rideData);
+  });
+
+  // clear the pending requests
+  pendingRequests.length = 0;
+});

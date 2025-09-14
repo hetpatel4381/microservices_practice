@@ -7,6 +7,8 @@ const cookieParser = require('cookie-parser');
 
 const connectDB = require('./config/db');
 connectDB();
+const rabbitMQ = require('./service/rabbit.js');
+rabbitMQ.connectRabbitMQ();
 
 const app = express();
 
